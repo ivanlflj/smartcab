@@ -24,6 +24,7 @@ class LearningAgent(Agent):
         deadline = self.env.get_deadline(self)
 
         # TODO: Update state
+        self.state = [self.next_waypoint, inputs]
         
         # TODO: Select action according to your policy
         action = random.choice(self.possible_actions)
