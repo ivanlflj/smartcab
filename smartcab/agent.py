@@ -13,9 +13,12 @@ class LearningAgent(Agent):
         # TODO: Initialize any additional variables here
         self.possible_actions = [None, 'forward', 'left', 'right']
         self.q = {}
-        self.alpha = 0.5
+        self.alpha = 0.8
         self.gama = 0.0
         self.epsilon = 0.0
+        #Performance variables
+        self.steps = 0
+        self.errors = 0
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
@@ -28,7 +31,7 @@ class LearningAgent(Agent):
         deadline = self.env.get_deadline(self)
 
         # TODO: Update state
-        self.state = [self.next_waypoint, inputs]
+        self.state = [self.next_waypoint, inputs['light'], inputs['oncoming'], inputs['left']]
         
         max = -float('Inf')
         best_action = 'forward'
@@ -44,7 +47,7 @@ class LearningAgent(Agent):
         if random.random() < (1 - self.epsilon):
             action = best_action
         else:
-            action = random.choice(possible_actions)
+            action = random.choice(self.possible_actions)
 
         # Execute action and get reward
         reward = self.env.act(self, action)
@@ -57,7 +60,13 @@ class LearningAgent(Agent):
         self.last_state_action = str([self.state,action])
         self.last_reward = reward
 
+        #Update performance variables
+        self.steps += 1
+        if reward < 0.:
+            self.errors += 1
+
         print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
+        print "Performance variables: %0.1f steps until here and %0.1f errors in total." % (self.steps, self.errors)
 
 
 def run():
@@ -70,7 +79,7 @@ def run():
     # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
 
     # Now simulate it
-    sim = Simulator(e, update_delay=0.2, display=True)  # create simulator (uses pygame when display=True, if available)
+    sim = Simulator(e, update_delay=0.01, display=False)  # create simulator (uses pygame when display=True, if available)
     # NOTE: To speed up simulation, reduce update_delay and/or set display=False
 
     sim.run(n_trials=100)  # run for a specified number of trials
