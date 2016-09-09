@@ -2,6 +2,7 @@ import random
 from environment import Agent, Environment
 from planner import RoutePlanner
 from simulator import Simulator
+from sklearn.tree import DecisionTreeRegressor
 
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
@@ -12,10 +13,10 @@ class LearningAgent(Agent):
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
         # TODO: Initialize any additional variables here
         self.possible_actions = [None, 'forward', 'left', 'right']
-        self.q = {}
-        self.alpha = 0.8
-        self.gama = 0.0
-        self.epsilon = 0.0
+        self.tree = DecisionTreeRegressor()
+        self.X = []
+        self.y = []
+        self.epsilon_changing = 1.0
         #Performance variables
         self.steps = 0
         self.errors = 0
@@ -32,33 +33,23 @@ class LearningAgent(Agent):
 
         # TODO: Update state
         self.state = [self.next_waypoint, inputs['light'], inputs['oncoming'], inputs['left']]
-        
-        max = -float('Inf')
-        best_action = 'forward'
-        for action in self.possible_actions:
-            try:
-                if self.q[str([self.state,action])] >= max:
-                    max = self.q[str([self.state,action])]
-                    best_action = action
-            except:
-                self.q[str([self.state,action])] = 0.
+        transformed_state = transform_state(self.state)
+
 
         # TODO: Select action according to your policy
-        if random.random() < (1 - self.epsilon):
-            action = best_action
+        if random.random() >= (1 - (self.epsilon_changing/len(self.y) if len(self.y) > 100 else 1.)):
+            action = random.choice([None, 'forward', 'left', 'right'])
         else:
-            action = random.choice(self.possible_actions)
+            reward_max = max(self.tree.predict(transform_action(action),transformed_state) for action in self.possible_actions)
+            action = untransform_action(action for action in self.possible_actions if self.tree.predict(transform_action(action),transformed_state) == reward_max)
 
         # Execute action and get reward
         reward = self.env.act(self, action)
 
         # TODO: Learn policy based on state, action, reward
-        try:
-            self.q[self.last_state_action] = self.q[self.last_state_action] + self.alpha * (self.last_reward + self.gama * self.q[str([self.state,action])] - self.q[self.last_state_action])
-        except:
-            print("")
-        self.last_state_action = str([self.state,action])
-        self.last_reward = reward
+        self.X.append([transform_action(action),transformed_state[0],transformed_state[1],transformed_state[2],transformed_state[3]])
+        self.y.append(reward)
+        self.tree.fit(self.X,self.y)
 
         #Update performance variables
         self.steps += 1
@@ -67,6 +58,24 @@ class LearningAgent(Agent):
 
         print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
         print "Performance variables: %0.1f steps until here and %0.1f errors in total." % (self.steps, self.errors)
+
+def transform_state(state):
+    state_transformed = []
+    for value in range(len(state)):
+        if value == 1:
+            state_transformed.append(0 if state[value] == 'green' else 1)
+        else:
+            state_transformed.append({None: 0, 'forward': 1, 'left': 2, 'right': 3}[state[value]])
+    return state_transformed
+
+def transform_action(action):
+    action_transformed = {None: 0, 'forward': 1, 'left': 2, 'right': 3}[action]
+    return action_transformed
+
+def untransform_action(action_transformed):
+    for action, act_trans in {None: 0, 'forward': 1, 'left': 2, 'right': 3}.iteritems():
+        if act_trans == action_transformed:
+            return action
 
 
 def run():
@@ -79,7 +88,7 @@ def run():
     # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
 
     # Now simulate it
-    sim = Simulator(e, update_delay=0.01, display=False)  # create simulator (uses pygame when display=True, if available)
+    sim = Simulator(e, update_delay=0.5, display=True)  # create simulator (uses pygame when display=True, if available)
     # NOTE: To speed up simulation, reduce update_delay and/or set display=False
 
     sim.run(n_trials=100)  # run for a specified number of trials
