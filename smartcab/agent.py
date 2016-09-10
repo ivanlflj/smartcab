@@ -13,13 +13,32 @@ class LearningAgent(Agent):
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
         # TODO: Initialize any additional variables here
         self.possible_actions = [None, 'forward', 'left', 'right']
-        self.tree = DecisionTreeRegressor()
-        self.X = []
-        self.y = []
-        self.epsilon_changing = 1.0
+        self.tree = DecisionTreeRegressor(min_samples_split = 1)
+        self.X = self.prepare_X()
+        self.y = self.prepare_y(self.X)
+        self.tree.fit(self.X,self.y)
+        self.epsilon = 0.0
         #Performance variables
         self.steps = 0
         self.errors = 0
+
+    def prepare_X(self):
+        X = []
+        for i in range(4):
+            for j in range(2):
+                for k in range(4):
+                    for l in range(4):
+                        for m in range(4):
+                            X.append([i,j,k,l,m])
+        return X
+
+    def prepare_y(self, X):
+        y = []
+        for i in range(len(X)):
+            y.append(1.)
+        return y
+
+
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
@@ -35,14 +54,15 @@ class LearningAgent(Agent):
         self.state = [self.next_waypoint, inputs['light'], inputs['oncoming'], inputs['left']]
         transformed_state = transform_state(self.state)
 
-
         # TODO: Select action according to your policy
-        if random.random() >= (1 - (self.epsilon_changing/len(self.y) if len(self.y) > 100 else 1.)):
+        if random.random() > (1 - self.epsilon):
             action = random.choice([None, 'forward', 'left', 'right'])
         else:
-            reward_max = max(self.tree.predict(transform_action(action),transformed_state) for action in self.possible_actions)
-            action = untransform_action(action for action in self.possible_actions if self.tree.predict(transform_action(action),transformed_state) == reward_max)
-
+            reward_max = max(self.tree.predict([transform_action(action),transformed_state[0],transformed_state[1],transformed_state[2],transformed_state[3]]) for action in self.possible_actions)
+            for act in self.possible_actions:
+                if self.tree.predict([transform_action(act),transformed_state[0],transformed_state[1],transformed_state[2],transformed_state[3]]) == reward_max:
+                    action = act
+            
         # Execute action and get reward
         reward = self.env.act(self, action)
 
@@ -50,6 +70,7 @@ class LearningAgent(Agent):
         self.X.append([transform_action(action),transformed_state[0],transformed_state[1],transformed_state[2],transformed_state[3]])
         self.y.append(reward)
         self.tree.fit(self.X,self.y)
+
 
         #Update performance variables
         self.steps += 1
@@ -88,7 +109,7 @@ def run():
     # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
 
     # Now simulate it
-    sim = Simulator(e, update_delay=0.5, display=True)  # create simulator (uses pygame when display=True, if available)
+    sim = Simulator(e, update_delay=0.1, display=True)  # create simulator (uses pygame when display=True, if available)
     # NOTE: To speed up simulation, reduce update_delay and/or set display=False
 
     sim.run(n_trials=100)  # run for a specified number of trials
